@@ -2,7 +2,9 @@ import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
+import { db } from "./db"; 
 import { 
+  users,
   createGameRequestSchema, 
   joinGameRequestSchema,
   updateRoundStatusSchema,
@@ -41,14 +43,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   apiRouter.get("/users", async (req: Request, res: Response) => {
     try {
-      // Getting all users for player selection (would need pagination in production)
-      const users = Array.from((storage as any).users.values()).map(user => ({
-        id: user.id,
-        username: user.username
-      }));
+      // Need to add some users for testing if none exist
+      const allUsers = await db.select().from(users);
       
-      return res.status(200).json(users);
+      if (allUsers.length === 0) {
+        // Add some test users if the database is empty
+        await db.insert(users).values([
+          { username: "John", password: "password" },
+          { username: "Emma", password: "password" },
+          { username: "Alex", password: "password" },
+          { username: "Olivia", password: "password" },
+          { username: "Daniel", password: "password" }
+        ]);
+        
+        // Get the users again
+        const newUsers = await db.select().from(users);
+        return res.status(200).json(newUsers);
+      }
+      
+      // Return the existing users
+      return res.status(200).json(allUsers);
     } catch (error) {
+      console.error("Error fetching users:", error);
       return res.status(500).json({ message: "Error fetching users" });
     }
   });
