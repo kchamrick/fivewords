@@ -309,4 +309,225 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+import { db } from "./db";
+import { eq, and, desc } from "drizzle-orm";
+
+export class DatabaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
+    return user;
+  }
+
+  async createGame(insertGame: InsertGame): Promise<Game> {
+    const [game] = await db
+      .insert(games)
+      .values(insertGame)
+      .returning();
+    return game;
+  }
+
+  async getGame(id: number): Promise<Game | undefined> {
+    const [game] = await db.select().from(games).where(eq(games.id, id));
+    return game || undefined;
+  }
+
+  async getGameWithPlayers(id: number): Promise<GameWithPlayers | undefined> {
+    const [game] = await db.select().from(games).where(eq(games.id, id));
+    if (!game) return undefined;
+
+    // Get players
+    const playersData = await db.select()
+      .from(players)
+      .where(eq(players.gameId, id));
+
+    // Get users for each player
+    const playersWithUsers = await Promise.all(
+      playersData.map(async (player) => {
+        const [user] = await db.select().from(users).where(eq(users.id, player.userId));
+        return { ...player, user };
+      })
+    );
+
+    // Get current round with poems
+    const currentRound = await this.getCurrentRound(id);
+    let roundWithPoems: RoundWithPoems | undefined;
+    
+    if (currentRound) {
+      roundWithPoems = await this.getRoundWithPoems(currentRound.id);
+    }
+
+    return {
+      ...game,
+      players: playersWithUsers,
+      currentRound: roundWithPoems
+    };
+  }
+
+  async updateGame(id: number, updates: Partial<Game>): Promise<Game | undefined> {
+    const [updatedGame] = await db
+      .update(games)
+      .set(updates)
+      .where(eq(games.id, id))
+      .returning();
+    return updatedGame;
+  }
+
+  async addPlayerToGame(insertPlayer: InsertPlayer): Promise<Player> {
+    const [player] = await db
+      .insert(players)
+      .values(insertPlayer)
+      .returning();
+    return player;
+  }
+
+  async getPlayersByGame(gameId: number): Promise<Player[]> {
+    return await db.select().from(players).where(eq(players.gameId, gameId));
+  }
+
+  async getPlayerScore(playerId: number): Promise<number> {
+    const [player] = await db.select({ score: players.score })
+      .from(players)
+      .where(eq(players.id, playerId));
+    return player?.score || 0;
+  }
+
+  async updatePlayerScore(playerId: number, scoreIncrement: number): Promise<number> {
+    const [player] = await db.select({ score: players.score })
+      .from(players)
+      .where(eq(players.id, playerId));
+    
+    const currentScore = player?.score || 0;
+    const newScore = currentScore + scoreIncrement;
+    
+    await db.update(players)
+      .set({ score: newScore })
+      .where(eq(players.id, playerId));
+    
+    return newScore;
+  }
+
+  async createRound(insertRound: InsertRound): Promise<Round> {
+    const [round] = await db
+      .insert(rounds)
+      .values(insertRound)
+      .returning();
+    return round;
+  }
+
+  async getRound(id: number): Promise<Round | undefined> {
+    const [round] = await db.select().from(rounds).where(eq(rounds.id, id));
+    return round || undefined;
+  }
+
+  async getRoundWithPoems(id: number): Promise<RoundWithPoems | undefined> {
+    const [round] = await db.select().from(rounds).where(eq(rounds.id, id));
+    if (!round) return undefined;
+
+    const [judge] = await db.select().from(users)
+      .where(eq(users.id, round.judgeId));
+    
+    if (!judge) return undefined;
+
+    const poemsData = await db.select().from(poems).where(eq(poems.roundId, id));
+
+    return {
+      ...round,
+      poems: poemsData,
+      judge
+    };
+  }
+
+  async getCurrentRound(gameId: number): Promise<Round | undefined> {
+    const [game] = await db.select().from(games).where(eq(games.id, gameId));
+    if (!game) return undefined;
+
+    const [round] = await db.select().from(rounds)
+      .where(and(
+        eq(rounds.gameId, gameId),
+        eq(rounds.roundNumber, game.currentRound)
+      ));
+    
+    return round || undefined;
+  }
+
+  async updateRoundStatus(id: number, status: string): Promise<Round | undefined> {
+    const [updatedRound] = await db
+      .update(rounds)
+      .set({ status })
+      .where(eq(rounds.id, id))
+      .returning();
+    return updatedRound;
+  }
+
+  async setRoundWinner(id: number, winnerId: number): Promise<Round | undefined> {
+    const [updatedRound] = await db
+      .update(rounds)
+      .set({ winnerId, status: "completed" })
+      .where(eq(rounds.id, id))
+      .returning();
+    return updatedRound;
+  }
+
+  async updateRoundEndTime(id: number, endTime: Date): Promise<Round | undefined> {
+    const [updatedRound] = await db
+      .update(rounds)
+      .set({ endTime })
+      .where(eq(rounds.id, id))
+      .returning();
+    return updatedRound;
+  }
+
+  async createPoem(insertPoem: InsertPoem): Promise<Poem> {
+    const [poem] = await db
+      .insert(poems)
+      .values(insertPoem)
+      .returning();
+    return poem;
+  }
+
+  async updatePoem(id: number, content: string): Promise<Poem | undefined> {
+    const [updatedPoem] = await db
+      .update(poems)
+      .set({ content })
+      .where(eq(poems.id, id))
+      .returning();
+    return updatedPoem;
+  }
+
+  async submitPoem(id: number): Promise<Poem | undefined> {
+    const now = new Date();
+    const [updatedPoem] = await db
+      .update(poems)
+      .set({ 
+        submitted: true,
+        submittedAt: now
+      })
+      .where(eq(poems.id, id))
+      .returning();
+    return updatedPoem;
+  }
+
+  async getPoemsByRound(roundId: number): Promise<Poem[]> {
+    return await db.select().from(poems).where(eq(poems.roundId, roundId));
+  }
+
+  async getPoem(id: number): Promise<Poem | undefined> {
+    const [poem] = await db.select().from(poems).where(eq(poems.id, id));
+    return poem || undefined;
+  }
+}
+
+export const storage = new DatabaseStorage();
