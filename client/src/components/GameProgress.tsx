@@ -1,3 +1,4 @@
+import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckIcon, TimerIcon, PenIcon, TrophyIcon } from "lucide-react";
 import { Round } from "@shared/schema";

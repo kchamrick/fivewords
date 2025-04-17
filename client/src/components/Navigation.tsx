@@ -1,3 +1,4 @@
+import React from "react";
 import { Home, History, Gamepad2, User, Settings } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -14,9 +15,9 @@ export default function Navigation() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
           <Link href="/">
-            <a className={`p-2 ${isActive("/") ? "text-primary" : "text-gray-600 hover:text-gray-900"}`}>
+            <div className={`p-2 ${isActive("/") ? "text-primary" : "text-gray-600 hover:text-gray-900"}`}>
               <Home className="text-xl w-5 h-5" />
-            </a>
+            </div>
           </Link>
           
           <button className="p-2 text-gray-600 hover:text-gray-900">
@@ -25,9 +26,9 @@ export default function Navigation() {
           
           {/* Game - This menu item is highlighted when in a game */}
           <Link href={location.startsWith("/games/") ? location : "/"}>
-            <a className={`p-2 ${location.startsWith("/games/") ? "text-primary" : "text-gray-600 hover:text-gray-900"}`}>
+            <div className={`p-2 ${location.startsWith("/games/") ? "text-primary" : "text-gray-600 hover:text-gray-900"}`}>
               <Gamepad2 className="text-xl w-5 h-5" />
-            </a>
+            </div>
           </Link>
           
           <button className="p-2 text-gray-600 hover:text-gray-900">
