@@ -48,6 +48,7 @@ export default function JudgingPhase({ game, currentUser, refetchGame }: Judging
   });
   
   const handleSelectWinner = (poemId: number) => {
+    console.log("Selecting winner for poem ID:", poemId);
     setSelectedPoemId(poemId);
     selectWinnerMutation.mutate(poemId);
   };

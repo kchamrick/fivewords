@@ -2,9 +2,11 @@ import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { db } from "./db"; 
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { 
   users,
+  players,
   createGameRequestSchema, 
   joinGameRequestSchema,
   updateRoundStatusSchema,
@@ -256,43 +258,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Winner selection and next round
   apiRouter.post("/rounds/:id/winner", async (req: Request, res: Response) => {
     try {
+      console.log("Winner selection endpoint called with body:", req.body);
       const roundId = Number(req.params.id);
       
       if (isNaN(roundId)) {
+        console.log("Invalid round ID:", req.params.id);
         return res.status(400).json({ message: "Invalid round ID" });
       }
       
       const result = z.object({ poemId: z.number() }).safeParse(req.body);
       
       if (!result.success) {
-        return res.status(400).json({ message: "Invalid poem ID" });
+        console.log("Invalid payload:", result.error);
+        return res.status(400).json({ message: "Invalid poem ID", error: result.error.format() });
       }
       
       const { poemId } = result.data;
+      console.log("Selecting poem ID:", poemId, "as winner for round:", roundId);
       
       const poem = await storage.getPoem(poemId);
       if (!poem) {
+        console.log("Poem not found with ID:", poemId);
         return res.status(404).json({ message: "Poem not found" });
       }
       
-      const winnerId = poem.playerId;
-      const round = await storage.getRound(roundId);
+      const playerWinnerId = poem.playerId;
+      console.log("Winner player ID:", playerWinnerId);
       
+      const round = await storage.getRound(roundId);
       if (!round) {
+        console.log("Round not found with ID:", roundId);
         return res.status(404).json({ message: "Round not found" });
       }
       
+      // Get the player to find the associated user
+      const [player] = await db.select()
+                              .from(players)
+                              .where(eq(players.id, playerWinnerId));
+                              
+      if (!player) {
+        console.log("Player not found with ID:", playerWinnerId);
+        return res.status(404).json({ message: "Player not found" });
+      }
+      
+      console.log("Found player:", player);
+      
       // Update the round with the winner
-      await storage.setRoundWinner(roundId, winnerId);
+      console.log("Setting round winner");
+      await storage.setRoundWinner(roundId, playerWinnerId);
       
       // Increment the winner's score
-      await storage.updatePlayerScore(winnerId, 1);
+      console.log("Updating player score for player ID:", playerWinnerId);
+      await storage.updatePlayerScore(playerWinnerId, 1);
       
       // Get the updated game with players (including updated scores)
+      console.log("Getting updated game");
       const game = await storage.getGameWithPlayers(round.gameId);
       
+      console.log("Winner selection successful");
       return res.status(200).json(game);
     } catch (error) {
+      console.error("Error selecting winner:", error);
       return res.status(500).json({ message: "Error selecting winner" });
     }
   });
