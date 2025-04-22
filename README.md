@@ -41,8 +41,8 @@ A collaborative poetry game where players create poems using five random words, 
 
 1. Clone the repository
    ```
-   git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-   cd YOUR_REPO_NAME
+   git clone https://github.com/kchamrick/fivewords.git
+   cd fivewords
    ```
 
 2. Install dependencies
